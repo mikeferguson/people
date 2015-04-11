@@ -32,8 +32,12 @@
 *  POSSIBILITY OF SUCH DAMAGE.
 *********************************************************************/
 
-#include "laser_processor.h"
-#include "calc_leg_features.h"
+#include "leg_detector/laser_processor.h"
+#include "leg_detector/calc_leg_features.h"
+
+#include "rosbag/bag.h"
+#include "rosbag/view.h"
+#include "rosbag/query.h"
 
 #include "opencv/cxcore.h"
 #include "opencv/cv.h"
@@ -42,7 +46,8 @@
 #include "people_msgs/PositionMeasurement.h"
 #include "sensor_msgs/LaserScan.h"
 
-using namespace std;
+#include <boost/foreach.hpp>  // for rosbag iterator
+
 using namespace laser_processor;
 using namespace ros;
 
@@ -54,9 +59,9 @@ public:
   ScanMask mask_;
   int mask_count_;
 
-  vector< vector<float> > pos_data_;
-  vector< vector<float> > neg_data_;
-  vector< vector<float> > test_data_;
+  std::vector< std::vector<float> > pos_data_;
+  std::vector< std::vector<float> > neg_data_;
+  std::vector< std::vector<float> > test_data_;
 
   CvRTrees forest;
 
@@ -87,38 +92,45 @@ public:
         break;
       }
 
-      ros::record::Player p;
-      if (p.open(file, ros::Time()))
+      rosbag::Bag bag;
+      try
       {
-        mask_.clear();
-        mask_count_ = 0;
+        bag.open(file, rosbag::bagmode::Read);
+      }
+      catch (rosbag::BagException)
+      {
+        ROS_FATAL_STREAM("Cannot open " << file);
+        exit(-1);
+      }
 
+      mask_.clear();
+      mask_count_ = 0;
+
+      rosbag::View view(bag, rosbag::TypeQuery("sensor_msgs/LaserScan"));
+      BOOST_FOREACH(rosbag::MessageInstance const m, view)
+      {
+        sensor_msgs::LaserScan::Ptr msg = m.instantiate<sensor_msgs::LaserScan>();
         switch (load)
         {
         case LOADING_POS:
-          p.addHandler<sensor_msgs::LaserScan>(string("*"), &TrainLegDetector::loadCb, this, &pos_data_);
+          loadScan(msg.get(), pos_data_);
           break;
         case LOADING_NEG:
           mask_count_ = 1000; // effectively disable masking
-          p.addHandler<sensor_msgs::LaserScan>(string("*"), &TrainLegDetector::loadCb, this, &neg_data_);
-          break;
+          loadScan(msg.get(), neg_data_);
+           break;
         case LOADING_TEST:
-          p.addHandler<sensor_msgs::LaserScan>(string("*"), &TrainLegDetector::loadCb, this, &test_data_);
+          loadScan(msg.get(), test_data_);
           break;
         default:
           break;
         }
-
-        while (p.nextMsg())
-          {}
       }
     }
   }
 
-  void loadCb(string name, sensor_msgs::LaserScan* scan, ros::Time t, ros::Time t_no_use, void* n)
+  void loadScan(sensor_msgs::LaserScan* scan, std::vector< std::vector<float> >& data)
   {
-    vector< vector<float> >* data = (vector< vector<float> >*)(n);
-
     if (mask_count_++ < 20)
     {
       mask_.addScan(*scan);
@@ -129,10 +141,10 @@ public:
       processor.splitConnected(connected_thresh_);
       processor.removeLessThan(5);
 
-      for (list<SampleSet*>::iterator i = processor.getClusters().begin();
+      for (std::list<SampleSet*>::iterator i = processor.getClusters().begin();
            i != processor.getClusters().end();
            i++)
-        data->push_back(calcLegFeatures(*i, *scan));
+        data.push_back(calcLegFeatures(*i, *scan));
     }
   }
 
@@ -146,7 +158,7 @@ public:
 
     // Put positive data in opencv format.
     int j = 0;
-    for (vector< vector<float> >::iterator i = pos_data_.begin();
+    for (std::vector< std::vector<float> >::iterator i = pos_data_.begin();
          i != pos_data_.end();
          i++)
     {
@@ -159,7 +171,7 @@ public:
     }
 
     // Put negative data in opencv format.
-    for (vector< vector<float> >::iterator i = neg_data_.begin();
+    for (std::vector< std::vector<float> >::iterator i = neg_data_.begin();
          i != neg_data_.end();
          i++)
     {
@@ -195,7 +207,7 @@ public:
 
     int pos_right = 0;
     int pos_total = 0;
-    for (vector< vector<float> >::iterator i = pos_data_.begin();
+    for (std::vector< std::vector<float> >::iterator i = pos_data_.begin();
          i != pos_data_.end();
          i++)
     {
@@ -208,7 +220,7 @@ public:
 
     int neg_right = 0;
     int neg_total = 0;
-    for (vector< vector<float> >::iterator i = neg_data_.begin();
+    for (std::vector< std::vector<float> >::iterator i = neg_data_.begin();
          i != neg_data_.end();
          i++)
     {
@@ -221,7 +233,7 @@ public:
 
     int test_right = 0;
     int test_total = 0;
-    for (vector< vector<float> >::iterator i = test_data_.begin();
+    for (std::vector< std::vector<float> >::iterator i = test_data_.begin();
          i != test_data_.end();
          i++)
     {
