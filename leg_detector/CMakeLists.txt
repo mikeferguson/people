@@ -45,8 +45,10 @@ catkin_package(
   CATKIN_DEPENDS
     geometry_msgs
     people_msgs
+    roscpp
     sensor_msgs
     std_msgs
+    tf
     visualization_msgs
   LIBRARIES
     leg_laser_processing
