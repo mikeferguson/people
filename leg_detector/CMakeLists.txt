@@ -50,6 +50,8 @@ catkin_package(
     std_msgs
     tf
     visualization_msgs
+  DEPENDS
+    bfl
   LIBRARIES
     leg_laser_processing
 )
