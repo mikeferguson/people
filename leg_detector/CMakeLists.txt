@@ -51,7 +51,8 @@ catkin_package(
     tf
     visualization_msgs
   DEPENDS
-    bfl
+    BFL
+    BULLET
   LIBRARIES
     leg_laser_processing
 )
