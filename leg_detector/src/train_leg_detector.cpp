@@ -118,7 +118,7 @@ public:
         case LOADING_NEG:
           mask_count_ = 1000; // effectively disable masking
           loadScan(msg.get(), neg_data_);
-           break;
+          break;
         case LOADING_TEST:
           loadScan(msg.get(), test_data_);
           break;
@@ -144,14 +144,16 @@ public:
       for (std::list<SampleSet*>::iterator i = processor.getClusters().begin();
            i != processor.getClusters().end();
            i++)
+      {
         data.push_back(calcLegFeatures(*i, *scan));
+        feat_count_ = data[0].size();
+      }
     }
   }
 
   void train()
   {
     int sample_size = pos_data_.size() + neg_data_.size();
-    feat_count_ = pos_data_[0].size();
 
     CvMat* cv_data = cvCreateMat(sample_size, feat_count_, CV_32FC1);
     CvMat* cv_resp = cvCreateMat(sample_size, 1, CV_32S);
@@ -244,12 +246,20 @@ public:
       test_total++;
     }
 
-    printf(" Pos train set: %d/%d %g\n", pos_right, pos_total, (float)(pos_right) / pos_total);
-    printf(" Neg train set: %d/%d %g\n", neg_right, neg_total, (float)(neg_right) / neg_total);
-    printf(" Test set:      %d/%d %g\n", test_right, test_total, (float)(test_right) / test_total);
+    if (!pos_data_.empty())
+      printf(" Pos train set: %d/%d %g\n", pos_right, pos_total, (float)(pos_right) / pos_total);
+    if (!neg_data_.empty())
+      printf(" Neg train set: %d/%d %g\n", neg_right, neg_total, (float)(neg_right) / neg_total);
+    if (!test_data_.empty())
+      printf(" Test set:      %d/%d %g\n", test_right, test_total, (float)(test_right) / test_total);
 
     cvReleaseMat(&tmp_mat);
+  }
 
+  bool load(char* file)
+  {
+    forest.load(file);
+    return (forest.get_active_var_mask()->cols != 0);
   }
 
   void save(char* file)
@@ -265,17 +275,24 @@ int main(int argc, char **argv)
   LoadType loading = LOADING_NONE;
 
   char save_file[100];
-  save_file[0] = 0;
+  char load_file[100];
+  save_file[0] = load_file[0] = 0;
 
   printf("Loading data...\n");
   for (int i = 1; i < argc; i++)
   {
-    if (!strcmp(argv[i], "--train"))
+    if (!strcmp(argv[i], "--pos"))
       loading = LOADING_POS;
     else if (!strcmp(argv[i], "--neg"))
       loading = LOADING_NEG;
     else if (!strcmp(argv[i], "--test"))
       loading = LOADING_TEST;
+    else if (!strcmp(argv[i], "--load"))
+    {
+      if (++i < argc)
+        strncpy(load_file, argv[i], 100);
+      continue;
+    }
     else if (!strcmp(argv[i], "--save"))
     {
       if (++i < argc)
@@ -286,8 +303,20 @@ int main(int argc, char **argv)
       tld.loadData(loading, argv[i]);
   }
 
-  printf("Training classifier...\n");
-  tld.train();
+  if (strlen(load_file) > 0)
+  {
+    printf("Loading classifier from: %s\n", load_file);
+    if (!tld.load(load_file))
+    {
+      printf("**Unable to load classifier**");
+      return -1;
+    }
+  }
+  else
+  {
+    printf("Training classifier...\n");
+    tld.train();
+  }
 
   printf("Evlauating classifier...\n");
   tld.test();
@@ -297,4 +326,6 @@ int main(int argc, char **argv)
     printf("Saving classifier as: %s\n", save_file);
     tld.save(save_file);
   }
+
+  return 0;
 }
