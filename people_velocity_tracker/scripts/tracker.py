@@ -92,8 +92,8 @@ class VelocityTracker(object):
         self.TIMEOUT = rospy.Duration(rospy.get_param('~timeout', 1.0))
         self.sub = rospy.Subscriber('/people_tracker_measurements',
                                     PositionMeasurementArray, self.pm_cb)
-        self.mpub = rospy.Publisher('/visualization_marker', Marker)
-        self.ppub = rospy.Publisher('/people', People)
+        self.mpub = rospy.Publisher('/visualization_marker', Marker, queue_size=10)
+        self.ppub = rospy.Publisher('/people', People, queue_size=10)
 
     def pm_cb(self, msg):
         for pm in msg.people:
